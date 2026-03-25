@@ -1,25 +1,39 @@
 import StellarSdk from "@stellar/stellar-sdk";
 
+export interface FeePayerAccount {
+  secret: string;
+  publicKey: string;
+  keypair: any;
+}
+
 export interface Config {
-  feePayerSecret: string;
-  feePayerPublicKey: string;
+  feePayerAccounts: FeePayerAccount[];
   baseFee: number;
   feeMultiplier: number;
   networkPassphrase: string;
   horizonUrl?: string;
-  rateLimitWindowMs: number;
-  rateLimitMax: number;
-  allowedOrigins: string[];
 }
 
 export function loadConfig(): Config {
-  const feePayerSecret = process.env.FLUID_FEE_PAYER_SECRET;
-  if (!feePayerSecret) {
+  const rawSecrets = process.env.FLUID_FEE_PAYER_SECRET;
+  if (!rawSecrets) {
     throw new Error("FLUID_FEE_PAYER_SECRET environment variable is required");
   }
 
-  const feePayerKeypair = StellarSdk.Keypair.fromSecret(feePayerSecret);
-  const feePayerPublicKey = feePayerKeypair.publicKey();
+  // Support comma-separated list of secrets
+  const secrets = rawSecrets.split(",").map((s) => s.trim()).filter(Boolean);
+  if (secrets.length === 0) {
+    throw new Error("FLUID_FEE_PAYER_SECRET must contain at least one secret");
+  }
+
+  const feePayerAccounts: FeePayerAccount[] = secrets.map((secret) => {
+    const keypair = StellarSdk.Keypair.fromSecret(secret);
+    return {
+      secret,
+      publicKey: keypair.publicKey(),
+      keypair,
+    };
+  });
 
   const baseFee = parseInt(process.env.FLUID_BASE_FEE || "100", 10);
   const feeMultiplier = parseFloat(process.env.FLUID_FEE_MULTIPLIER || "2.0");
@@ -28,27 +42,24 @@ export function loadConfig(): Config {
     "Test SDF Network ; September 2015";
   const horizonUrl = process.env.STELLAR_HORIZON_URL;
 
-  const rateLimitWindowMs = parseInt(
-    process.env.FLUID_RATE_LIMIT_WINDOW_MS || "60000",
-    10
-  );
-  const rateLimitMax = parseInt(process.env.FLUID_RATE_LIMIT_MAX || "5", 10);
-  // Parse allowed origins from comma-separated environment variable
-  const allowedOriginsEnv = process.env.ALLOWED_ORIGINS || "";
-  const allowedOrigins = allowedOriginsEnv
-    .split(",")
-    .map((origin) => origin.trim())
-    .filter((origin) => origin.length > 0);
-
   return {
-    feePayerSecret,
-    feePayerPublicKey,
+    feePayerAccounts,
     baseFee,
     feeMultiplier,
     networkPassphrase,
     horizonUrl,
-    rateLimitWindowMs,
-    rateLimitMax,
-    allowedOrigins,
   };
+}
+
+// Round-robin counter (module-level, safe for single-threaded Node.js event loop)
+let rrIndex = 0;
+
+/**
+ * Pick the next fee payer account using Round Robin strategy.
+ */
+export function pickFeePayerAccount(config: Config): FeePayerAccount {
+  const accounts = config.feePayerAccounts;
+  const account = accounts[rrIndex % accounts.length];
+  rrIndex = (rrIndex + 1) % accounts.length;
+  return account;
 }

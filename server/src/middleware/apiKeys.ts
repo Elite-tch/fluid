@@ -1,11 +1,14 @@
 import { NextFunction, Request, Response } from "express";
+import { AppError } from "../errors/AppError";
 
 export interface ApiKeyConfig {
   key: string;
+  tenantId: string;
   name: string;
   tier: "free" | "pro";
   maxRequests: number;
   windowMs: number;
+  dailyQuotaStroops: number;
 }
 
 const API_KEYS = new Map<string, ApiKeyConfig>([
@@ -13,20 +16,24 @@ const API_KEYS = new Map<string, ApiKeyConfig>([
     "fluid-free-demo-key",
     {
       key: "fluid-free-demo-key",
+      tenantId: "tenant-demo-free",
       name: "Demo Free dApp",
       tier: "free",
       maxRequests: 2,
       windowMs: 60_000,
+      dailyQuotaStroops: 200,
     },
   ],
   [
     "fluid-pro-demo-key",
     {
       key: "fluid-pro-demo-key",
+      tenantId: "tenant-demo-pro",
       name: "Demo Pro dApp",
       tier: "pro",
       maxRequests: 5,
       windowMs: 60_000,
+      dailyQuotaStroops: 2_000,
     },
   ],
 ]);
@@ -58,20 +65,19 @@ export function apiKeyMiddleware(
   const apiKey = getApiKeyFromHeader(req);
 
   if (!apiKey) {
-    res.status(401).json({
-      error:
+    return next(
+      new AppError(
         "Missing API key. Provide a valid x-api-key header to access this endpoint.",
-    });
-    return;
+        401,
+        "AUTH_FAILED"
+      )
+    );
   }
 
   const apiKeyConfig = API_KEYS.get(apiKey);
 
   if (!apiKeyConfig) {
-    res.status(403).json({
-      error: "Invalid API key.",
-    });
-    return;
+    return next(new AppError("Invalid API key.", 403, "AUTH_FAILED"));
   }
 
   res.locals.apiKey = apiKeyConfig;

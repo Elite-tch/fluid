@@ -1,3 +1,5 @@
+mod xdr;
+
 use axum::{routing::get, Json, Router};
 use serde::Serialize;
 use std::net::SocketAddr;
