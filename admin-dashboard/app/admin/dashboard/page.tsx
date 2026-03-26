@@ -1,4 +1,5 @@
 import { auth } from "@/auth";
+import Link from "next/link";
 import { SignersTable, TransactionsTable } from "@/components/dashboard/ResponsiveTables";
 import { getDashboardPageData } from "@/lib/dashboard-data";
 
@@ -55,6 +56,14 @@ export default async function AdminDashboard() {
         </section>
 
         <section className="mt-6 space-y-6">
+          <div className="flex justify-end">
+            <Link
+              href="/admin/transactions"
+              className="inline-flex min-h-10 items-center justify-center rounded-full bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-700"
+            >
+              Open transaction history
+            </Link>
+          </div>
           <TransactionsTable transactions={transactions} />
           <SignersTable signers={signers} />
         </section>
