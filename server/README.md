@@ -42,6 +42,14 @@ Optional:
 - `PORT` - Server port (default: 3000)
 - `FLUID_RATE_LIMIT_WINDOW_MS` - Rate limit window in milliseconds (default: 60000)
 - `FLUID_RATE_LIMIT_MAX` - Max requests per window per IP (default: 5)
+- `FLUID_ALLOWED_ORIGINS` - Comma-separated CORS allowlist
+- `FLUID_LOW_BALANCE_THRESHOLD_XLM` - Alert threshold for fee payer balances
+- `FLUID_LOW_BALANCE_CHECK_INTERVAL_MS` - Balance polling interval (default: 3600000)
+- `FLUID_LOW_BALANCE_ALERT_COOLDOWN_MS` - Minimum time between repeated alerts per account (default: 21600000)
+- `FLUID_ALERT_SLACK_WEBHOOK_URL` - Slack incoming webhook URL
+- `FLUID_ALERT_SMTP_HOST` / `FLUID_ALERT_SMTP_PORT` / `FLUID_ALERT_SMTP_SECURE` - SMTP connection settings
+- `FLUID_ALERT_SMTP_USER` / `FLUID_ALERT_SMTP_PASS` - Optional SMTP auth
+- `FLUID_ALERT_EMAIL_FROM` / `FLUID_ALERT_EMAIL_TO` - Email sender and comma-separated recipients
 
 Mock API keys for local development:
 - `fluid-free-demo-key` - Free tier, 2 requests per minute
@@ -55,8 +63,17 @@ Health check endpoint.
 
 Response:
 ```json
-{ "status": "ok" }
+{
+  "status": "ok",
+  "low_balance_alerting": {
+    "enabled": true
+  }
+}
 ```
+
+### POST /test/alerts/low-balance
+
+Sends a manual low-balance alert through the configured Slack webhook and/or SMTP transport. This is useful for capturing the required review screenshot without draining a real account first.
 
 ### POST /fee-bump
 

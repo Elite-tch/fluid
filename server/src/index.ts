@@ -6,6 +6,8 @@ import { loadConfig } from "./config";
 import { feeBumpHandler } from "./handlers/feeBump";
 import { apiKeyMiddleware } from "./middleware/apiKeys";
 import { apiKeyRateLimit } from "./middleware/rateLimit";
+import { AlertService } from "./services/alertService";
+import { initializeBalanceMonitor } from "./workers/balanceMonitor";
 import { initializeLedgerMonitor } from "./workers/ledgerMonitor";
 import { transactionStore } from "./workers/transactionStore";
 import { notFoundHandler, globalErrorHandler } from "./middleware/errorHandler";
@@ -17,6 +19,7 @@ const app = express();
 app.use(express.json());
 
 const config = loadConfig();
+const alertService = new AlertService(config.alerting);
 
 // Configure rate limiter
 const limiter = rateLimit({
@@ -71,6 +74,17 @@ app.get("/health", (req: Request, res: Response) => {
     status: "ok",
     fee_payers: accounts,
     total: accounts.length,
+    low_balance_alerting: {
+      enabled:
+        config.alerting.lowBalanceThresholdXlm !== undefined &&
+        alertService.isEnabled() &&
+        Boolean(config.horizonUrl),
+      threshold_xlm: config.alerting.lowBalanceThresholdXlm ?? null,
+      check_interval_ms: config.alerting.checkIntervalMs,
+      cooldown_ms: config.alerting.cooldownMs,
+      slack_configured: Boolean(config.alerting.slackWebhookUrl),
+      email_configured: Boolean(config.alerting.email),
+    },
   });
 });
 
@@ -80,7 +94,7 @@ app.post(
   apiKeyRateLimit,
   limiter,
   (req: Request, res: Response, next: NextFunction) => {
-    feeBumpHandler(req, res, config, next);
+    feeBumpHandler(req, res, next, config);
   },
 );
 
@@ -99,6 +113,25 @@ app.get("/test/transactions", (req: Request, res: Response) => {
   const transactions = transactionStore.getAllTransactions();
   res.json({ transactions });
 });
+
+app.post(
+  "/test/alerts/low-balance",
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!alertService.isEnabled()) {
+        return res.status(400).json({
+          error:
+            "No alert transport configured. Set Slack webhook or SMTP env vars first.",
+        });
+      }
+
+      await alertService.sendTestAlert(config);
+      res.json({ message: "Test low-balance alert sent" });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
 
 // 404 - must come after all routes
 app.use(notFoundHandler);
@@ -120,6 +153,25 @@ if (config.horizonUrl) {
   }
 } else {
   console.log("No Horizon URL configured - ledger monitor disabled");
+}
+
+let balanceMonitor: any = null;
+if (
+  config.horizonUrl &&
+  config.alerting.lowBalanceThresholdXlm !== undefined &&
+  alertService.isEnabled()
+) {
+  try {
+    balanceMonitor = initializeBalanceMonitor(config, alertService);
+    balanceMonitor.start();
+    console.log("Balance monitor worker started");
+  } catch (error) {
+    console.error("Failed to start balance monitor:", error);
+  }
+} else {
+  console.log(
+    "Low balance alerting disabled - missing Horizon URL, threshold, or alert transport",
+  );
 }
 
 app.listen(PORT, () => {
