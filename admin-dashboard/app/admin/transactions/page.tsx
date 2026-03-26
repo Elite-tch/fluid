@@ -8,10 +8,10 @@ type SearchParams = Record<string, string | string[] | undefined>;
 export default async function AdminTransactionsPage({
   searchParams,
 }: {
-  searchParams?: Promise<SearchParams> | SearchParams;
+  searchParams: Promise<SearchParams>;
 }) {
   const session = await auth();
-  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const resolvedSearchParams = await searchParams;
   const query = parseTransactionHistoryQuery(resolvedSearchParams);
   const transactionHistory = await getTransactionHistoryPageData(query);
 
